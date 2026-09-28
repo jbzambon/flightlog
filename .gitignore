@@ -1,0 +1,7 @@
+# Your own logbook data and secrets stay out of git
+app/seed_flights.json
+*.db
+*.db-*
+.env
+data/
+__pycache__/

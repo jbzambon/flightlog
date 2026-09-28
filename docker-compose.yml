@@ -1,0 +1,26 @@
+# Standalone deployment: Caddy (automatic HTTPS) + flightlog.
+# If you already run a reverse proxy, drop the caddy service and proxy to port 8081.
+services:
+  flightlog:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      FLIGHTLOG_DB: /data/flightlog.db
+      COOKIE_SECURE: "true"
+    volumes:
+      - ./data:/data
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    environment:
+      DOMAIN: ${DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+    depends_on: [flightlog]
+
+volumes:
+  caddy_data:
