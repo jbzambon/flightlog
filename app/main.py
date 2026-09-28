@@ -28,6 +28,8 @@ COOKIE_SECURE = os.environ.get("COOKIE_SECURE", "true").lower() != "false"
 SITE_TITLE = os.environ.get("SITE_TITLE", "Flight Log")
 HOME_AIRPORT = os.environ.get("HOME_AIRPORT", "").upper()
 SITE_FOOTER = os.environ.get("SITE_FOOTER", "")
+# Link to the source code in the footer; set SOURCE_URL= (empty) to hide it
+SOURCE_URL = os.environ.get("SOURCE_URL", "https://github.com/jbzambon/flightlog")
 SEED_FILE = Path(os.environ.get("SEED_FILE", BASE / "seed_flights.json"))
 # Fields hidden from signed-out visitors (other people's names/cert numbers, private notes)
 PUBLIC_HIDDEN = [f.strip() for f in os.environ.get("PUBLIC_HIDDEN_FIELDS", "instructor,notes").split(",") if f.strip()]
@@ -160,7 +162,7 @@ def current_editor(request: Request) -> str:
 @app.get("/api/config")
 def config(request: Request):
     email = request.session.get("email")
-    return {"title": SITE_TITLE, "google_client_id": GOOGLE_CLIENT_ID, "home_airport": HOME_AIRPORT, "footer": SITE_FOOTER,
+    return {"title": SITE_TITLE, "google_client_id": GOOGLE_CLIENT_ID, "home_airport": HOME_AIRPORT, "footer": SITE_FOOTER, "source_url": SOURCE_URL,
             "editor": bool(email and email in ALLOWED_EMAILS), "email": email}
 
 

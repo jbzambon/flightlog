@@ -226,7 +226,9 @@ async function load() {
   state.cfg = cfg; state.flights = flights;
   document.title = cfg.title || "Flight Log";
   $("#site-title").textContent = cfg.title || "Flight Log";
-  $("#foot").textContent = cfg.footer ? `${cfg.footer} Click a flight for details.` : "Click a flight for details.";
+  $("#foot").replaceChildren(cfg.footer ? `${cfg.footer} Click a flight for details.` : "Click a flight for details.",
+    ...(cfg.source_url && /^https:\/\//.test(cfg.source_url)
+      ? [" · ", el("a", { href: cfg.source_url, target: "_blank", rel: "noopener" }, "Source code on GitHub")] : []));
   renderAll();
 }
 

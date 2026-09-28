@@ -54,6 +54,7 @@ To try the app with demo data, set `SEED_FILE=/app/seed_flights.example.json`.
 | `SITE_TITLE` | `Flight Log` | header and browser tab title |
 | `SITE_FOOTER` | empty | optional note under the flight list |
 | `HOME_AIRPORT` | empty | pre-fills From/To on new flights |
+| `SOURCE_URL` | this repo | "Source code on GitHub" link in the footer; set empty to hide |
 | `GOOGLE_CLIENT_ID` | | see above |
 | `ALLOWED_EMAILS` | | comma-separated list of accounts that can edit |
 | `SECRET_KEY` | | signs the session cookie; use a long random string |

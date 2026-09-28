@@ -135,6 +135,7 @@ tr.detail td { background: var(--surface-2); padding: 14px 16px; }
 .note { font-size: 13px; color: var(--warn); }
 
 .foot { font-size: 13px; margin: 14px 0 40px; }
+.foot a { color: var(--accent); }
 
 /* dialogs */
 .dlg { border: 1px solid var(--line); border-radius: 14px; padding: 22px; background: var(--surface); color: var(--text); width: min(760px, calc(100vw - 32px)); max-height: calc(100vh - 32px); }
