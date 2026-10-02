@@ -87,6 +87,21 @@ function renderCurrency() {
   } else {
     items.push(["Flight review", "None marked in the log", "Unknown", "warn"]);
   }
+  // Medical (14 CFR 61.23): for private-pilot privileges any class lasts 60 calendar months
+  // if under 40 at the exam, otherwise 24
+  const med = state.cfg.medical || {};
+  const medEdit = state.cfg.editor ? el("button", { class: "btn sm ghost link", onclick: openMedical }, "Edit") : null;
+  if (med.medical_exam_date) {
+    const months = med.medical_under_40 ? 60 : 24;
+    const exp = endOfMonthPlus(parseDate(med.medical_exam_date), months);
+    const left = daysBetween(today, exp);
+    const cls = ["", "First", "Second", "Third"][med.medical_class] || "Third";
+    items.push(["Medical", [`${cls} class, exam ${fmtDate(med.medical_exam_date)}; good through `
+      + exp.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }), medEdit],
+      left < 0 ? "Expired" : left < 60 ? `${left} days left` : "Current", left < 0 ? "bad" : left < 60 ? "warn" : "ok"]);
+  } else if (state.cfg.editor) {
+    items.push(["Medical", ["Not entered ", medEdit], "Unknown", "warn"]);
+  }
   const cutoff = new Date(today); cutoff.setDate(cutoff.getDate() - 90);
   const recent = F.filter((f) => parseDate(f.date) > cutoff);
   const ldg = sum(recent, "day_ldg") + sum(recent, "night_ldg");
@@ -96,7 +111,7 @@ function renderCurrency() {
   const yr = new Date(today); yr.setFullYear(yr.getFullYear() - 1);
   items.push(["Last 12 months", `${hrs(sum(F.filter((f) => parseDate(f.date) > yr), "total")) || "0.0"} hours`, "", ""]);
   $("#currency").replaceChildren(...items.map(([l, sub, pill, cls]) =>
-    el("li", {}, el("span", { class: "lbl" }, l, el("span", { class: "sub" }, sub)), pill ? el("span", { class: `pill ${cls}` }, pill) : "")));
+    el("li", {}, el("span", { class: "lbl" }, l, el("span", { class: "sub" }, ...[sub].flat())), pill ? el("span", { class: `pill ${cls}` }, pill) : "")));
 }
 
 function renderYears() {
@@ -267,6 +282,29 @@ async function signOut() {
   renderAll(); toast("Signed out");
 }
 
+// ---------- medical ----------
+function openMedical() {
+  const f = $("#medical-form"), m = state.cfg.medical || {};
+  f.reset(); $("#medical-err").hidden = true;
+  f.elements.medical_class.value = String(m.medical_class || 3);
+  f.elements.medical_exam_date.value = m.medical_exam_date || "";
+  f.elements.medical_under_40.checked = !!m.medical_under_40;
+  $("#medical-dlg").showModal();
+}
+async function saveMedical(e) {
+  e.preventDefault();
+  const f = $("#medical-form"), err = $("#medical-err");
+  if (!f.elements.medical_exam_date.value) { err.textContent = "Exam date is required."; err.hidden = false; return; }
+  try {
+    state.cfg.medical = await api("/api/settings/medical", { method: "PUT", body: JSON.stringify({
+      medical_class: Number(f.elements.medical_class.value),
+      medical_exam_date: f.elements.medical_exam_date.value,
+      medical_under_40: f.elements.medical_under_40.checked,
+    }) });
+    $("#medical-dlg").close(); renderCurrency(); toast("Medical updated");
+  } catch (ex) { err.textContent = ex.message; err.hidden = false; }
+}
+
 // ---------- add / edit / delete ----------
 function openEdit(f) {
   const form = $("#edit-form");
@@ -331,6 +369,7 @@ $("#signout-btn").addEventListener("click", signOut);
 $("#add-btn").addEventListener("click", () => openEdit(null));
 $("#edit-form").addEventListener("submit", saveFlight);
 $("#confirm-yes").addEventListener("click", doDelete);
+$("#medical-form").addEventListener("submit", saveMedical);
 $("#q").addEventListener("input", renderTable);
 $("#year").addEventListener("change", renderTable);
 $("#edit-form").elements.total.addEventListener("change", (e) => {

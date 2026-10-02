@@ -130,6 +130,25 @@
   </form>
 </dialog>
 
+<dialog id="medical-dlg" class="dlg small">
+  <form id="medical-form" method="dialog" novalidate>
+    <h3>Medical certificate</h3>
+    <p class="muted">Only these three fields are stored and shown. They're enough to work out when it expires.</p>
+    <label>Class
+      <select name="medical_class">
+        <option value="3">Third class</option><option value="2">Second class</option><option value="1">First class</option>
+      </select>
+    </label>
+    <label>Date of examination<input name="medical_exam_date" type="date" required></label>
+    <label class="check"><input name="medical_under_40" type="checkbox"> I was under 40 on the exam date (60 months instead of 24)</label>
+    <p id="medical-err" class="err" hidden></p>
+    <div class="dlg-actions">
+      <button type="button" class="btn ghost" data-close>Cancel</button>
+      <button type="submit" class="btn primary">Save</button>
+    </div>
+  </form>
+</dialog>
+
 <dialog id="confirm-dlg" class="dlg small">
   <h3>Delete this flight?</h3>
   <p id="confirm-text" class="muted"></p>

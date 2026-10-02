@@ -3,7 +3,7 @@
 A small self-hosted pilot logbook. Anyone can browse your flights, totals, and currency. Only you can add, edit, or delete entries, after signing in with Google.
 
 - **Totals:** total time, PIC, dual received, cross-country, night, actual and simulated instrument, day and night landings, and approaches
-- **Currency panel:** date of last flight, flight review due date (24 calendar months), and 90-day day and night passenger currency
+- **Currency panel:** date of last flight, flight review due date (24 calendar months), medical certificate expiration (class and exam date entered on the site; 24 or 60 calendar months by age), and 90-day day and night passenger currency
 - **Summaries:** hours by year and hours by aircraft
 - **Searchable flight list,** grouped by year, with a detail view for each flight and CSV export
 - **Privacy controls:** instructor names and certificate numbers, and your private notes, are hidden from visitors who aren't signed in (configurable)

@@ -54,6 +54,7 @@ CREATE TABLE IF NOT EXISTS flights (
     updated_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_flights_date ON flights(date);
+CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT);
 CREATE TABLE IF NOT EXISTS audit (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     at TEXT DEFAULT CURRENT_TIMESTAMP,
@@ -137,6 +138,28 @@ class Flight(BaseModel):
         return v.upper() if v else v
 
 
+class Medical(BaseModel):
+    """Only what's needed to compute expiration: no DOB, address, or certificate numbers."""
+    medical_class: Optional[int] = Field(None, ge=1, le=3)
+    medical_exam_date: Optional[str] = None
+    medical_under_40: bool = False
+
+    @field_validator("medical_exam_date")
+    @classmethod
+    def valid_exam_date(cls, v):
+        if v:
+            date.fromisoformat(v)
+        return v or None
+
+
+def get_medical(conn) -> dict:
+    s = dict(conn.execute("SELECT key, value FROM settings WHERE key LIKE 'medical_%'").fetchall())
+    if not s.get("medical_exam_date"):
+        return {}
+    return {"medical_class": int(s.get("medical_class") or 3), "medical_exam_date": s["medical_exam_date"],
+            "medical_under_40": s.get("medical_under_40") == "1"}
+
+
 app = FastAPI(title=SITE_TITLE, docs_url=None, redoc_url=None, openapi_url=None)
 app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY, session_cookie="flightlog_session",
                    max_age=60 * 60 * 24 * 30, same_site="strict", https_only=COOKIE_SECURE)
@@ -162,7 +185,9 @@ def current_editor(request: Request) -> str:
 @app.get("/api/config")
 def config(request: Request):
     email = request.session.get("email")
-    return {"title": SITE_TITLE, "google_client_id": GOOGLE_CLIENT_ID, "home_airport": HOME_AIRPORT, "footer": SITE_FOOTER, "source_url": SOURCE_URL,
+    with db() as conn:
+        medical = get_medical(conn)
+    return {"medical": medical, "title": SITE_TITLE, "google_client_id": GOOGLE_CLIENT_ID, "home_airport": HOME_AIRPORT, "footer": SITE_FOOTER, "source_url": SOURCE_URL,
             "editor": bool(email and email in ALLOWED_EMAILS), "email": email}
 
 
@@ -250,6 +275,18 @@ def delete_flight(fid: int, email: str = Depends(current_editor)):
         conn.execute("DELETE FROM flights WHERE id=?", (fid,))
         _audit(conn, email, "delete", fid, dict(before), None)
     return {"deleted": fid}
+
+
+@app.put("/api/settings/medical")
+def update_medical(med: Medical, email: str = Depends(current_editor)):
+    vals = {"medical_class": str(med.medical_class or ""), "medical_exam_date": med.medical_exam_date or "",
+            "medical_under_40": "1" if med.medical_under_40 else "0"}
+    with db() as conn:
+        before = get_medical(conn)
+        conn.executemany("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                         list(vals.items()))
+        _audit(conn, email, "medical", None, before or None, vals)
+        return get_medical(conn)
 
 
 @app.get("/api/export.csv")
