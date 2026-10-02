@@ -87,21 +87,6 @@ function renderCurrency() {
   } else {
     items.push(["Flight review", "None marked in the log", "Unknown", "warn"]);
   }
-  // Medical (14 CFR 61.23): for private-pilot privileges any class lasts 60 calendar months
-  // if under 40 at the exam, otherwise 24
-  const med = state.cfg.medical || {};
-  const medEdit = state.cfg.editor ? el("button", { class: "btn sm ghost link", onclick: openMedical }, "Edit") : null;
-  if (med.medical_exam_date) {
-    const months = med.medical_under_40 ? 60 : 24;
-    const exp = endOfMonthPlus(parseDate(med.medical_exam_date), months);
-    const left = daysBetween(today, exp);
-    const cls = ["", "First", "Second", "Third"][med.medical_class] || "Third";
-    items.push(["Medical", [`${cls} class, exam ${fmtDate(med.medical_exam_date)}; good through `
-      + exp.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }), medEdit],
-      left < 0 ? "Expired" : left < 60 ? `${left} days left` : "Current", left < 0 ? "bad" : left < 60 ? "warn" : "ok"]);
-  } else if (state.cfg.editor) {
-    items.push(["Medical", ["Not entered ", medEdit], "Unknown", "warn"]);
-  }
   const cutoff = new Date(today); cutoff.setDate(cutoff.getDate() - 90);
   const recent = F.filter((f) => parseDate(f.date) > cutoff);
   const ldg = sum(recent, "day_ldg") + sum(recent, "night_ldg");
@@ -234,7 +219,7 @@ function renderAuth() {
   $("#signin-btn").hidden = ed;
 }
 
-function renderAll() { renderStats(); renderCurrency(); renderYears(); renderAircraft(); renderLists(); renderTable(); renderAuth(); }
+function renderAll() { renderStats(); renderPilot(); renderCurrency(); renderYears(); renderAircraft(); renderLists(); renderTable(); renderAuth(); }
 
 async function load() {
   const [cfg, flights] = await Promise.all([api("/api/config"), api("/api/flights")]);
@@ -282,26 +267,91 @@ async function signOut() {
   renderAll(); toast("Signed out");
 }
 
-// ---------- medical ----------
-function openMedical() {
-  const f = $("#medical-form"), m = state.cfg.medical || {};
-  f.reset(); $("#medical-err").hidden = true;
-  f.elements.medical_class.value = String(m.medical_class || 3);
-  f.elements.medical_exam_date.value = m.medical_exam_date || "";
-  f.elements.medical_under_40.checked = !!m.medical_under_40;
-  $("#medical-dlg").showModal();
+// ---------- pilot panel: certificates, medical, checkouts ----------
+const CLASS_NAMES = ["", "First", "Second", "Third"];
+function medicalStatus(med) {
+  if (!med || !med.medical_exam_date) return null;
+  // 14 CFR 61.23: for private-pilot privileges, any class lasts 60 calendar months if under 40 at the exam, else 24
+  const exp = endOfMonthPlus(parseDate(med.medical_exam_date), med.medical_under_40 ? 60 : 24);
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const left = daysBetween(today, exp);
+  return { exp, left, pill: left < 0 ? "Expired" : left < 60 ? `${left} days left` : "Current",
+    cls: left < 0 ? "bad" : left < 60 ? "warn" : "ok" };
 }
-async function saveMedical(e) {
+
+function renderPilot() {
+  const p = (state.cfg && state.cfg.pilot) || { certificates: [], medical: {}, checkouts: [] };
+  const ed = state.cfg.editor;
+  const empty = !p.certificates.length && !p.medical.medical_exam_date && !p.checkouts.length;
+  $("#pilot-panel").hidden = empty && !ed;
+  $("#pilot-edit").hidden = !ed;
+  const list = el("ul", { class: "currency" });
+  p.certificates.forEach((c) => list.append(el("li", {},
+    el("span", { class: "lbl" }, c.title,
+      el("span", { class: "sub" }, [c.ratings, c.issued ? `Issued ${fmtDate(c.issued)}` : null].filter(Boolean).join(" · "))))));
+  const ms = medicalStatus(p.medical);
+  if (ms) {
+    list.append(el("li", {},
+      el("span", { class: "lbl" }, "Medical",
+        el("span", { class: "sub" }, `${CLASS_NAMES[p.medical.medical_class] || "Third"} class, exam ${fmtDate(p.medical.medical_exam_date)}; `
+          + `good through ${ms.exp.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}`)),
+      el("span", { class: `pill ${ms.cls}` }, ms.pill)));
+  }
+  const box = el("div", {}, list);
+  if (p.checkouts.length) {
+    box.append(el("div", { class: "lbl checkouts-h" }, "Checked out in"),
+      el("div", { class: "chips" }, ...p.checkouts.map((c) => el("span", { class: "chip", title: c.note || "" },
+        c.aircraft, c.note ? el("span", { class: "chip-note" }, c.note) : ""))));
+  }
+  if (empty && ed) box.append(el("p", { class: "muted" }, "Add your certificates, medical, and the aircraft you're checked out in."));
+  $("#pilot").replaceChildren(box);
+}
+
+function rowInputs(container, fields, values = {}) {
+  const row = el("div", { class: "edit-row" },
+    ...fields.map(([name, label, type, ph]) => el("label", {}, label,
+      el("input", { name, type: type || "text", placeholder: ph || "", value: values[name] || "" }))),
+    el("button", { type: "button", class: "btn sm ghost", title: "Remove", onclick: () => row.remove() }, "✕"));
+  container.append(row);
+}
+const CERT_FIELDS = [["title", "Certificate", "text", "Private Pilot"], ["ratings", "Ratings", "text", "Airplane Single Engine Land"], ["issued", "Issued", "date"]];
+const CHECKOUT_FIELDS = [["aircraft", "Aircraft", "text", "C-172"], ["note", "Note (optional)", "text", "Wings of Carolina, 2015"]];
+
+function openPilot() {
+  const p = state.cfg.pilot || { certificates: [], medical: {}, checkouts: [] };
+  const f = $("#pilot-form");
+  f.reset(); $("#pilot-err").hidden = true;
+  $("#cert-rows").replaceChildren(); $("#checkout-rows").replaceChildren();
+  p.certificates.forEach((c) => rowInputs($("#cert-rows"), CERT_FIELDS, c));
+  p.checkouts.forEach((c) => rowInputs($("#checkout-rows"), CHECKOUT_FIELDS, c));
+  f.elements.medical_class.value = String(p.medical.medical_class || 3);
+  f.elements.medical_exam_date.value = p.medical.medical_exam_date || "";
+  f.elements.medical_under_40.checked = !!p.medical.medical_under_40;
+  $("#pilot-dlg").showModal();
+}
+
+function readRows(container, fields) {
+  return [...container.querySelectorAll(".edit-row")].map((r) => {
+    const o = {};
+    fields.forEach(([name]) => { const v = r.querySelector(`[name="${name}"]`).value.trim(); o[name] = v || null; });
+    return o;
+  }).filter((o) => o[fields[0][0]]);   // skip rows with the first field empty
+}
+
+async function savePilot(e) {
   e.preventDefault();
-  const f = $("#medical-form"), err = $("#medical-err");
-  if (!f.elements.medical_exam_date.value) { err.textContent = "Exam date is required."; err.hidden = false; return; }
+  const f = $("#pilot-form"), err = $("#pilot-err");
+  err.hidden = true;
   try {
-    state.cfg.medical = await api("/api/settings/medical", { method: "PUT", body: JSON.stringify({
-      medical_class: Number(f.elements.medical_class.value),
-      medical_exam_date: f.elements.medical_exam_date.value,
-      medical_under_40: f.elements.medical_under_40.checked,
+    state.cfg.pilot = await api("/api/settings/pilot", { method: "PUT", body: JSON.stringify({
+      certificates: readRows($("#cert-rows"), CERT_FIELDS),
+      checkouts: readRows($("#checkout-rows"), CHECKOUT_FIELDS),
+      medical: f.elements.medical_exam_date.value ? {
+        medical_class: Number(f.elements.medical_class.value),
+        medical_exam_date: f.elements.medical_exam_date.value,
+        medical_under_40: f.elements.medical_under_40.checked } : {},
     }) });
-    $("#medical-dlg").close(); renderCurrency(); toast("Medical updated");
+    $("#pilot-dlg").close(); renderPilot(); toast("Pilot info updated");
   } catch (ex) { err.textContent = ex.message; err.hidden = false; }
 }
 
@@ -369,7 +419,10 @@ $("#signout-btn").addEventListener("click", signOut);
 $("#add-btn").addEventListener("click", () => openEdit(null));
 $("#edit-form").addEventListener("submit", saveFlight);
 $("#confirm-yes").addEventListener("click", doDelete);
-$("#medical-form").addEventListener("submit", saveMedical);
+$("#pilot-form").addEventListener("submit", savePilot);
+$("#pilot-edit").addEventListener("click", openPilot);
+$("#add-cert").addEventListener("click", () => rowInputs($("#cert-rows"), CERT_FIELDS));
+$("#add-checkout").addEventListener("click", () => rowInputs($("#checkout-rows"), CHECKOUT_FIELDS));
 $("#q").addEventListener("input", renderTable);
 $("#year").addEventListener("change", renderTable);
 $("#edit-form").elements.total.addEventListener("change", (e) => {

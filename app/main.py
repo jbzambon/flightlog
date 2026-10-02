@@ -152,6 +152,36 @@ class Medical(BaseModel):
         return v or None
 
 
+class Certificate(BaseModel):
+    title: str = Field(..., min_length=1, max_length=80)          # e.g. "Private Pilot"
+    ratings: Optional[str] = Field(None, max_length=120)         # e.g. "Airplane Single Engine Land"
+    issued: Optional[str] = None                                 # YYYY-MM-DD
+
+    @field_validator("issued")
+    @classmethod
+    def valid_issued(cls, v):
+        if v:
+            date.fromisoformat(v)
+        return v or None
+
+
+class Checkout(BaseModel):
+    aircraft: str = Field(..., min_length=1, max_length=40)       # e.g. "C-172"
+    note: Optional[str] = Field(None, max_length=120)             # e.g. "Wings of Carolina, 2015"
+
+
+class Pilot(BaseModel):
+    certificates: list[Certificate] = Field(default_factory=list, max_length=20)
+    medical: Medical = Field(default_factory=Medical)
+    checkouts: list[Checkout] = Field(default_factory=list, max_length=30)
+
+
+def get_pilot(conn) -> dict:
+    s = dict(conn.execute("SELECT key, value FROM settings WHERE key IN ('certificates', 'checkouts')").fetchall())
+    return {"certificates": json.loads(s.get("certificates") or "[]"), "medical": get_medical(conn),
+            "checkouts": json.loads(s.get("checkouts") or "[]")}
+
+
 def get_medical(conn) -> dict:
     s = dict(conn.execute("SELECT key, value FROM settings WHERE key LIKE 'medical_%'").fetchall())
     if not s.get("medical_exam_date"):
@@ -186,8 +216,8 @@ def current_editor(request: Request) -> str:
 def config(request: Request):
     email = request.session.get("email")
     with db() as conn:
-        medical = get_medical(conn)
-    return {"medical": medical, "title": SITE_TITLE, "google_client_id": GOOGLE_CLIENT_ID, "home_airport": HOME_AIRPORT, "footer": SITE_FOOTER, "source_url": SOURCE_URL,
+        pilot = get_pilot(conn)
+    return {"pilot": pilot, "title": SITE_TITLE, "google_client_id": GOOGLE_CLIENT_ID, "home_airport": HOME_AIRPORT, "footer": SITE_FOOTER, "source_url": SOURCE_URL,
             "editor": bool(email and email in ALLOWED_EMAILS), "email": email}
 
 
@@ -277,16 +307,20 @@ def delete_flight(fid: int, email: str = Depends(current_editor)):
     return {"deleted": fid}
 
 
-@app.put("/api/settings/medical")
-def update_medical(med: Medical, email: str = Depends(current_editor)):
-    vals = {"medical_class": str(med.medical_class or ""), "medical_exam_date": med.medical_exam_date or "",
+@app.put("/api/settings/pilot")
+def update_pilot(p: Pilot, email: str = Depends(current_editor)):
+    med = p.medical
+    vals = {"certificates": json.dumps([c.model_dump() for c in p.certificates]),
+            "checkouts": json.dumps([c.model_dump() for c in p.checkouts]),
+            "medical_class": str(med.medical_class or ""), "medical_exam_date": med.medical_exam_date or "",
             "medical_under_40": "1" if med.medical_under_40 else "0"}
     with db() as conn:
-        before = get_medical(conn)
+        before = get_pilot(conn)
         conn.executemany("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
                          list(vals.items()))
-        _audit(conn, email, "medical", None, before or None, vals)
-        return get_medical(conn)
+        after = get_pilot(conn)
+        _audit(conn, email, "pilot", None, before, after)
+        return after
 
 
 @app.get("/api/export.csv")
