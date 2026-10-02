@@ -167,7 +167,8 @@ class Certificate(BaseModel):
 
 class Checkout(BaseModel):
     aircraft: str = Field(..., min_length=1, max_length=40)       # e.g. "C-172"
-    note: Optional[str] = Field(None, max_length=120)             # e.g. "Wings of Carolina, 2015"
+    org: Optional[str] = Field(None, max_length=60)               # e.g. "WCFC"; chips are colored by org
+    note: Optional[str] = Field(None, max_length=120)             # e.g. "2013"
 
 
 class Pilot(BaseModel):

@@ -299,9 +299,17 @@ function renderPilot() {
   }
   const box = el("div", {}, list);
   if (p.checkouts.length) {
+    // One color per organization, in order of first appearance (first org = blue); no org = neutral
+    const orgs = [...new Set(p.checkouts.map((c) => c.org).filter(Boolean))];
+    const orgClass = (o) => (o ? `org-${orgs.indexOf(o) % 6}` : "org-none");
     box.append(el("div", { class: "lbl checkouts-h" }, "Checked out in"),
-      el("div", { class: "chips" }, ...p.checkouts.map((c) => el("span", { class: "chip", title: c.note || "" },
-        c.aircraft, c.note ? el("span", { class: "chip-note" }, c.note) : ""))));
+      el("div", { class: "chips" }, ...p.checkouts.map((c) =>
+        el("span", { class: `chip ${orgClass(c.org)}`, title: [c.org, c.note].filter(Boolean).join(" · ") },
+          c.aircraft, c.note ? el("span", { class: "chip-note" }, c.note) : ""))));
+    if (orgs.length) {
+      box.append(el("div", { class: "org-legend" }, ...orgs.map((o) =>
+        el("span", { class: orgClass(o) }, el("i", { class: "dot", "aria-hidden": "true" }), o))));
+    }
   }
   if (empty && ed) box.append(el("p", { class: "muted" }, "Add your certificates, medical, and the aircraft you're checked out in."));
   $("#pilot").replaceChildren(box);
@@ -309,13 +317,14 @@ function renderPilot() {
 
 function rowInputs(container, fields, values = {}) {
   const row = el("div", { class: "edit-row" },
-    ...fields.map(([name, label, type, ph]) => el("label", {}, label,
-      el("input", { name, type: type || "text", placeholder: ph || "", value: values[name] || "" }))),
+    ...fields.map(([name, label, type, ph, list]) => el("label", {}, label,
+      el("input", { name, type: type || "text", placeholder: ph || "", value: values[name] || "", list }))),
     el("button", { type: "button", class: "btn sm ghost", title: "Remove", onclick: () => row.remove() }, "✕"));
   container.append(row);
 }
 const CERT_FIELDS = [["title", "Certificate", "text", "Private Pilot"], ["ratings", "Ratings", "text", "Airplane Single Engine Land"], ["issued", "Issued", "date"]];
-const CHECKOUT_FIELDS = [["aircraft", "Aircraft", "text", "C-172"], ["note", "Note (optional)", "text", "Wings of Carolina, 2015"]];
+const CHECKOUT_FIELDS = [["aircraft", "Aircraft", "text", "C-172"], ["org", "Organization", "text", "WCFC", "orgs"],
+  ["note", "Note (optional)", "text", "2015"]];
 
 function openPilot() {
   const p = state.cfg.pilot || { certificates: [], medical: {}, checkouts: [] };
@@ -324,6 +333,7 @@ function openPilot() {
   $("#cert-rows").replaceChildren(); $("#checkout-rows").replaceChildren();
   p.certificates.forEach((c) => rowInputs($("#cert-rows"), CERT_FIELDS, c));
   p.checkouts.forEach((c) => rowInputs($("#checkout-rows"), CHECKOUT_FIELDS, c));
+  $("#orgs").replaceChildren(...[...new Set(p.checkouts.map((c) => c.org).filter(Boolean))].map((o) => el("option", { value: o })));
   f.elements.medical_class.value = String(p.medical.medical_class || 3);
   f.elements.medical_exam_date.value = p.medical.medical_exam_date || "";
   f.elements.medical_under_40.checked = !!p.medical.medical_under_40;
